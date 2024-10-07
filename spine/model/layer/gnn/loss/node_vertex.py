@@ -4,11 +4,12 @@ import torch
 import numpy as np
 from warnings import warn
 
-from .node_class import NodeClassificationLoss
+from .node_class import NodeClassLoss
 
 from spine.model.layer.factories import loss_fn_factory
 
-from spine import TensorBatch, Meta
+from spine.data import TensorBatch, Meta
+
 from spine.utils.globals import PRINT_COL, VTX_COLS
 from spine.utils.geo import Geometry
 from spine.utils.gnn.cluster import get_cluster_label_batch
@@ -84,7 +85,7 @@ class NodeVertexLoss(torch.nn.Module):
         self.return_vertex_labels = return_vertex_labels
 
         # Initialize the primary identification loss
-        self.primary_loss = NodeClassificationLoss(
+        self.primary_loss = NodeClassLoss(
                 target='inter_primary', balance_loss=balance_primary_loss,
                 loss=primary_loss)
 
