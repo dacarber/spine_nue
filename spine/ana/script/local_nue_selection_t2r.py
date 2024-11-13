@@ -72,27 +72,38 @@ class local_nuet2rAna(AnaBase):
             event_status = None
             if reco_inter == None:
                 continue
-            
+            #bad_interaction = False
             # Containment cut
-            if not true_inter.is_contained : continue
-            
+            #if not true_inter.is_contained : continue
+            true_containment = True
+            for par in true_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    #print(par)
+                    true_containment = False
+                    continue
+            reco_containment = True
+            bad_interaction = False
+            for par in reco_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    reco_containment = False
+                    bad_interaction = True
             # Primary electron cut
-            true_electron = [p for p in true_inter.particles if (p.pid == 1) and (p.is_primary) and (p.energy_deposit > 80)]
+            true_electron = [p for p in true_inter.particles if (p.pid == 1) and (p.is_primary) and (p.energy_deposit > 70)]
             if len(true_electron) != 1 : continue
 
             # Primary photons cut
             print('1')
-            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_deposit > 50)]
+            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_deposit > 40)]
             
             #Sort protons by highest energy
             
             true_protons = sorted([tp for tp in true_protons], key=lambda tp : tp.energy_deposit, reverse=True)
 
 
-            bad_interaction = False
+            
              # Containment cut
-            if not reco_inter.is_contained : 
-                bad_interaction = True
+            #if not reco_inter.is_contained : 
+            #    bad_interaction = True
             
             # Fiducial cut
             #if not reco_inter.is_fiducial : continue
@@ -100,7 +111,7 @@ class local_nuet2rAna(AnaBase):
             # Flash cut
             if reco_inter.flash_time < 0 or reco_inter.flash_time > 9.6 : 
                 bad_interaction = True
-            reco_electrons = [t for t in reco_inter.particles if (t.pid == 1) and (t.is_primary) and (t.calo_ke > 80)]
+            reco_electrons = [t for t in reco_inter.particles if (t.pid == 1) and (t.is_primary) and (t.calo_ke > 70)]
             if len(reco_electrons) != 1 :
                 bad_interaction = True
             reco_electrons = sorted([te for te in reco_electrons], key=lambda te : te.calo_ke, reverse=True)
@@ -111,7 +122,7 @@ class local_nuet2rAna(AnaBase):
                         matched_electron = reco_e
                         break
             
-            reco_protons = [p for p in reco_inter.particles if (p.pid == 4) and (p.is_primary) and (p.csda_ke > 50)]
+            reco_protons = [p for p in reco_inter.particles if (p.pid == 4) and (p.is_primary) and (p.csda_ke > 40)]
             reco_protons = sorted([rp for rp in reco_protons], key=lambda rp : rp.calo_ke, reverse=True) 
             
 
@@ -125,8 +136,8 @@ class local_nuet2rAna(AnaBase):
             true_pion = [p for p in true_inter.particles if (p.pid == 3) and (p.is_primary)]
             true_topology =  f'{len(true_photons)}g{len(true_electron)}e{len(true_muon)}m{len(true_pion)}pi{len(true_protons)}p'
 
-            reco_category = selection.reco_category(reco_inter,topology, event_status)
-            true_category = selection.true_category(true_inter,true_topology)
+            reco_category = selection.reco_category(reco_inter,topology, event_status,reco_containment)
+            true_category = selection.true_category(true_inter,true_topology,true_containment)
 
             if (true_category == 'Nue Other' or true_category == '1e' or true_category == '1e1pi1p' or true_category == '1e1p' or true_category == '1eNp'):
                 print("Nue Inclusive",reco_category,":",data['file_index']," Topology: ", topology)
@@ -136,7 +147,11 @@ class local_nuet2rAna(AnaBase):
             for particles in reco_inter.particles:
                 if particles.pid < 2 and particles.is_primary:
                     reco_total_energy += particles.calo_ke
-                elif particles.pid >=2 and particles.is_primary:
+                elif particles.pid ==2 and particles.is_primary:
+                    reco_total_energy += particles.csda_ke
+                elif particles.pid ==3 and particles.is_primary:
+                    reco_total_energy += particles.csda_ke
+                elif particles.pid ==4 and particles.is_primary:
                     reco_total_energy += particles.csda_ke
             #print(reco_total_energy)
             if len(reco_electrons) > 0:

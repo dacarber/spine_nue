@@ -14,73 +14,77 @@ from scipy.spatial import distance
 
 
 class nue_analysis:
-    def true_category(self,interaction,topology):
+    def true_category(self,interaction,topology,containment):
         category = ''
         #topology = interaction.topology
         if interaction.nu_id >= 0:
             particles = self.count_particles(topology)
             if particles[1] == 1 and particles[2] == 0:
-                if particles[3] == 0 and particles[0] == 0 and particles[4] == 1 and interaction.is_contained == True:
+                if particles[3] == 0 and particles[0] == 0 and particles[4] == 1 and containment == True:
                     category = '1e1p'
-                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 1 and interaction.is_contained == False:
+                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 1 and containment == False:
                     category = 'uncontained 1e1p'
-                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 0 and interaction.is_contained == True:
+                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 0 and containment == True:
                     category = '1e'
-                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 0 and interaction.is_contained == False:
+                elif particles[3] == 0 and particles[0] == 0 and particles[4] == 0 and containment == False:
                     category = 'uncontained 1e'
-                elif particles[3] == 0 and particles[0] == 0 and particles[4] >1 and interaction.is_contained == True:
+                elif particles[3] == 0 and particles[0] == 0 and particles[4] >1 and containment == True:
                     category = '1eNp'
-                elif particles[3] == 0 and particles[0] == 0 and particles[4] >1 and interaction.is_contained == False:
+                elif particles[3] == 0 and particles[0] == 0 and particles[4] >1 and containment == False:
                     category = 'uncontained 1eNp'
-                elif particles[3] == 1 and particles[0] == 0 and particles[4] ==1 and interaction.is_contained == True:
+                elif particles[3] == 1 and particles[0] == 0 and particles[4] ==1 and containment == True:
                     category = '1e1pi1p' 
-                elif particles[3] == 1 and particles[0] == 0 and particles[4] ==1 and interaction.is_contained == False:
+                elif particles[3] == 1 and particles[0] == 0 and particles[4] ==1 and containment == False:
                     category = 'uncontained 1e1pi1p'
-                elif interaction.current_type == 0 and interaction.is_contained == True:
+                elif interaction.current_type == 0 and containment == True:
                     category = 'Nue Other'
-                elif interaction.current_type == 0 and interaction.is_contained == False:
+                elif interaction.current_type == 0 and containment == False:
                     category = 'uncontained Nue Other'
-                elif interaction.current_type == 1 and interaction.is_contained == True:
+                elif interaction.current_type == 1 and containment == True:
                     category = 'NC'
             elif particles[2] != 0 and interaction.current_type == 0:
                 category = 'Numu'
-            elif interaction.current_type == 1 and interaction.is_contained == True:
+            elif interaction.current_type == 1 and containment == True:
                 category = 'NC'
-            elif interaction.is_contained == True and abs(interaction.pdg_code) == 12: 
+            elif containment == True and abs(interaction.pdg_code) == 12: 
                 category = 'Nue Other'
-            elif interaction.is_contained == False and abs(interaction.pdg_code) == 12: 
+            elif containment == False and abs(interaction.pdg_code) == 12: 
                 category = 'uncontained Nue Other'
-            elif interaction.is_contained == True and abs(interaction.pdg_code) == 14: 
+            elif containment == True and abs(interaction.pdg_code) == 14: 
                 category = 'Numu'
-            else:
-                print(topology)
+            #else:
+            #    print(topology)
     
         else:
             category= 'cosmic'
         return category
 
-    def reco_category(self,interaction,topology,event_status):
+    def reco_category(self,interaction,topology,event_status,containment):
         #topology = interaction.topology
         catergory = ''
         particles = self.count_particles(topology)
         if topology == None:
             category = None
         elif (particles[1] == 1 and particles[2] == 0 and event_status != True):
-            if interaction.is_contained == False:
+            if containment == False:
                 category = 'uncontained'
-            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 0 and particles[4] == 1 and interaction.is_contained == True:
+            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 0 and particles[4] == 1 and containment == True:
                 category = '1e1p'
-            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 0 and particles[4] ==0 and interaction.is_contained == True:
+            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 0 and particles[4] ==0 and containment == True:
                 category = '1e'
-            elif particles[1] == 1 and particles[0] == 0 and  particles[3] == 0 and particles[4] >1 and interaction.is_contained == True:
+            elif particles[1] == 1 and particles[0] == 0 and  particles[3] == 0 and particles[4] >1 and containment == True:
                 category = '1eNp'
-            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 1 and particles[4] ==1 and interaction.is_contained == True:
-                category = '1e1pi1p'
+            #elif particles[1] == 1 and particles[0] == 0 and particles[3] >= 1 and particles[4] ==0 and containment == True:
+            #    category = '1eNpi'
+            elif particles[1] == 1 and particles[0] == 0 and particles[3] == 1 and particles[4] >0 and containment == True:
+                category = '1e1piNp'
+            #elif particles[1] == 1 and particles[0] > 0 and particles[3] >= 1 and particles[4] >0 and containment == True:
+            #    category = 'Ng1eNpiNp'
             else: 
                 category = 'Nue Other'
         elif interaction.flash_time >9.6 or interaction.flash_time <0:
             category = 'Flash fail'
-        elif interaction.is_contained == False:
+        elif containment == False:
             category = 'Contain fail'
         elif particles[1] >1:
             category = 'Too many Electron fail'

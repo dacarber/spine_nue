@@ -16,12 +16,12 @@ from spine.ana.base import AnaBase
 # Must list the post-processor(s) here to be found by the factory.
 # You must also add it to the list of imported modules in the
 # `spine.ana.factories`!
-__all__ = ['showerr2tAna']
+__all__ = ['showert2rAna']
 
 
-class showerr2tAna(AnaBase):
+class showert2rAna(AnaBase):
     """Script to make numu CC pi0 selection"""
-    name = 'shower_r2t'
+    name = 'shower_t2r'
 
     def __init__(self, **kwargs):
         """Initialize the analysis script.
@@ -40,7 +40,7 @@ class showerr2tAna(AnaBase):
         
         self.initialize_writer(f'log_{job_id}')
         
-        #self.keys['particle_matches_r2t']= True
+        #self.keys['particle_matches_t2r']= True
         self.keys['interaction_matches_t2r'] = True
 
     def process(self, data):
@@ -73,19 +73,26 @@ class showerr2tAna(AnaBase):
             #true_par = match[1]
             pi0_1 = -1
             pi0_2 = -1
-            for reco_par in reco_inter.particles:
+            for true_par in true_inter.particles:
+                if true_par.pdg_code == 22 and true_par.is_primary and true_par.creation_process == 'Decay' and true_par.ancestor_pdg_code == 111:
+                    pi0_tag = True
+                    if pi0_1 == -1:
+                        pi0_1 = true_par.energy_init
+                    elif pi0_2 == -1:
+                        pi0_2 = true_par.energy_init
+            for true_par in true_inter.particles:
                 matched_par = None
-                for true_par in true_inter.particles:
-                    if  len(reco_par.match_ids)>0:
-                        if true_par.id == reco_par.match_ids[0]:
-                            matched_par = true_par
+                for reco_par in reco_inter.particles:
+                    if  len(true_par.match_ids)>0:
+                        if reco_par.id == true_par.match_ids[0]:
+                            matched_par = reco_par
                             break
                 if matched_par == None:
                     continue
                 if true_par == None:
                     continue
-                if reco_par == None:
-                    continue
+                #if reco_par == None:
+                #    continue
                 # Containment cut
                 #if not true_par.is_contained : continue
     
@@ -109,40 +116,40 @@ class showerr2tAna(AnaBase):
             
             # reco dict corresponding to a CSV row
             
-                reco_nue_dict['reco_id'] = reco_par.id
-                reco_nue_dict['reco_contain'] = reco_par.is_contained
-                reco_nue_dict['reco_calo_ke'] = reco_par.calo_ke
-                reco_nue_dict['reco_match'] = reco_par.match_overlaps[0]
-                reco_nue_dict['reco_start_x'] = reco_par.start_point[0]
-                reco_nue_dict['reco_start_y'] = reco_par.start_point[1]
-                reco_nue_dict['reco_start_z'] = reco_par.start_point[2]
-                reco_nue_dict['reco_primary_score'] = reco_par.primary_scores[0]
-                reco_nue_dict['reco_pid_score'] = reco_par.pid_scores[0]
-                reco_nue_dict['reco_pid'] = reco_par.pid
-                reco_nue_dict['reco_start_dir_x'] = reco_par.start_dir[0]
-                reco_nue_dict['reco_start_dir_y'] = reco_par.start_dir[1]
-                reco_nue_dict['reco_start_dir_z'] = reco_par.start_dir[2]
-                reco_nue_dict['reco_size'] = reco_par.size
-                reco_nue_dict['reco_shape'] = reco_par.shape
+                reco_nue_dict['reco_id'] = matched_par.id
+                reco_nue_dict['reco_contain'] = matched_par.is_contained
+                reco_nue_dict['reco_calo_ke'] = matched_par.calo_ke
+                reco_nue_dict['reco_match'] = matched_par.match_overlaps[0]
+                reco_nue_dict['reco_start_x'] = matched_par.start_point[0]
+                reco_nue_dict['reco_start_y'] = matched_par.start_point[1]
+                reco_nue_dict['reco_start_z'] = matched_par.start_point[2]
+                reco_nue_dict['reco_primary_score'] = matched_par.primary_scores[0]
+                reco_nue_dict['reco_pid_score'] = matched_par.pid_scores[0]
+                reco_nue_dict['reco_pid'] = matched_par.pid
+                reco_nue_dict['reco_start_dir_x'] = matched_par.start_dir[0]
+                reco_nue_dict['reco_start_dir_y'] = matched_par.start_dir[1]
+                reco_nue_dict['reco_start_dir_z'] = matched_par.start_dir[2]
+                reco_nue_dict['reco_size'] = matched_par.size
+                reco_nue_dict['reco_shape'] = matched_par.shape
                 reco_nue_dict['reco_conversion_dist'] = reco_conversion_dist
     
     
-                reco_nue_dict['true_id'] = matched_par.id
-                reco_nue_dict['true_contain'] = matched_par.is_contained
-                reco_nue_dict['true_energy_init'] = matched_par.energy_init
-                reco_nue_dict['true_energy_deposit'] = matched_par.energy_deposit
-                reco_nue_dict['true_match'] = matched_par.match_overlaps[0]
-                reco_nue_dict['true_start_x'] = matched_par.start_point[0]
-                reco_nue_dict['true_start_y'] = matched_par.start_point[1]
-                reco_nue_dict['true_start_z'] = matched_par.start_point[2]
-                reco_nue_dict['true_primary'] = matched_par.is_primary
-                reco_nue_dict['true_pid'] = matched_par.pid
-                reco_nue_dict['true_start_dir_x'] = matched_par.start_dir[0]
-                reco_nue_dict['true_start_dir_y'] = matched_par.start_dir[1]
-                reco_nue_dict['true_start_dir_z'] = matched_par.start_dir[2]
-                reco_nue_dict['true_size'] = matched_par.size
-                reco_nue_dict['true_shape'] = matched_par.shape
-                reco_nue_dict['true_time'] = matched_par.t
+                reco_nue_dict['true_id'] = true_par.id
+                reco_nue_dict['true_contain'] = true_par.is_contained
+                reco_nue_dict['true_energy_init'] = true_par.energy_init
+                reco_nue_dict['true_energy_deposit'] = true_par.energy_deposit
+                reco_nue_dict['true_match'] = true_par.match_overlaps[0]
+                reco_nue_dict['true_start_x'] = true_par.start_point[0]
+                reco_nue_dict['true_start_y'] = true_par.start_point[1]
+                reco_nue_dict['true_start_z'] = true_par.start_point[2]
+                reco_nue_dict['true_primary'] = true_par.is_primary
+                reco_nue_dict['true_pid'] = true_par.pid
+                reco_nue_dict['true_start_dir_x'] = true_par.start_dir[0]
+                reco_nue_dict['true_start_dir_y'] = true_par.start_dir[1]
+                reco_nue_dict['true_start_dir_z'] = true_par.start_dir[2]
+                reco_nue_dict['true_size'] = true_par.size
+                reco_nue_dict['true_shape'] = true_par.shape
+                reco_nue_dict['true_time'] = true_par.t
                 reco_nue_dict['reco_vertex_x'] = reco_inter.vertex[0]
                 reco_nue_dict['reco_vertex_y'] = reco_inter.vertex[1]
                 reco_nue_dict['reco_vertex_z'] = reco_inter.vertex[2]

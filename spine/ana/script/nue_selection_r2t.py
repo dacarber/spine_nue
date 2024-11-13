@@ -66,42 +66,58 @@ class nuer2tAna(AnaBase):
                 continue
             
             # Containment cut
-            if not reco_inter.is_contained : 
-                event_status+='c'
-                continue
+            reco_containment = True
+            for par in reco_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    event_status+='c'
+                    reco_containment = False
+                    continue
+            true_containment = True
+            for par in true_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    true_containment = False
+            
+            #if not reco_inter.is_contained : 
+            #    event_status+='c'
+            #    continue
+            
             # Fiducial cut
             #if not reco_inter.is_fiducial : continue
             
             # Flash cut
             if reco_inter.flash_time < 0 or reco_inter.flash_time > 9.6 : 
                 event_status+='f'
-                #continue
+                continue
             # Grabs electrons and requires that there is only 1 primary electron shower
-            reco_electron = [p for p in reco_inter.particles if (p.pid == 1)]# and (p.is_primary) and (p.calo_ke > 70)]
+            reco_electron = [p for p in reco_inter.particles if (p.pid == 1) and (p.is_primary) and (p.calo_ke/77.0777/0.81*81.3955 > 70)]
+            print(reco_inter.particles[0].__dir__())
             if len(reco_electron) != 1 : 
                 reco_electron = sorted([te for te in reco_electron], key=lambda te : te.calo_ke, reverse=True)
                 event_status+='e'
-                #continue
+                continue
             
-            true_electrons = [t for t in true_inter.particles if (t.pid == 1)]# and (t.is_primary) and (t.energy_init > 70)]
+            true_electrons = [t for t in true_inter.particles if (t.pid == 1) and (t.is_primary) and (t.energy_init > 70)]
             true_electrons = sorted([te for te in true_electrons], key=lambda te : te.energy_deposit, reverse=True)
             matched_electron = None
+            #print(reco_electron)
             if len(reco_electron) > 0:
                 for true_e in true_inter.particles:
+                    if (len(reco_electron[0].match_ids) <1):
+                        break
                     if true_e.id == reco_electron[0].match_ids[0]:
                         matched_electron = true_e
                         break
 
-            reco_protons = [p for p in reco_inter.particles if (p.pid == 4)]# and (p.is_primary) and (p.csda_ke > 40)]
+            reco_protons = [p for p in reco_inter.particles if (p.pid == 4) and (p.is_primary) and (p.csda_ke > 40)]
             true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_init > 40)]
             
             #Sort protons by highest energy
             reco_protons = sorted([rp for rp in reco_protons], key=lambda rp : rp.csda_ke, reverse=True) 
             true_protons = sorted([tp for tp in true_protons], key=lambda tp : tp.energy_deposit, reverse=True)
 
-            reco_photons = [p for p in reco_inter.particles if (p.pid == 0)]# and (p.is_primary) and (p.calo_ke > 25)]
-            reco_muon = [p for p in reco_inter.particles if (p.pid == 2)]# and (p.is_primary) and (p.csda_ke > 25)]
-            reco_pion = [p for p in reco_inter.particles if (p.pid == 3)]# and (p.is_primary) and (p.csda_ke > 25)]
+            reco_photons = [p for p in reco_inter.particles if (p.pid == 0) and (p.is_primary) and (p.calo_ke > 25)]
+            reco_muon = [p for p in reco_inter.particles if (p.pid == 2) and (p.is_primary) and (p.csda_ke > 25)]
+            reco_pion = [p for p in reco_inter.particles if (p.pid == 3) and (p.is_primary) and (p.csda_ke > 25)]
             topology = f'{len(reco_photons)}g{len(reco_electron)}e{len(reco_muon)}m{len(reco_pion)}pi{len(reco_protons)}p'
 
 
@@ -118,14 +134,14 @@ class nuer2tAna(AnaBase):
             print(true_topology, " : ", true_inter.topology)
 
             #Finds the category of interactions i.e. 1e1p, backgrounds
-            reco_category = selection.reco_category(reco_inter,topology, event_status)
-            true_category = selection.true_category(true_inter,true_topology)
+            reco_category = selection.reco_category(reco_inter,topology, event_status,reco_containment)
+            true_category = selection.true_category(true_inter,true_topology,true_containment)
             
             # Reco energy calculation
             reco_total_energy = 0
             for particles in reco_inter.particles:
                 if particles.pid < 2 and particles.is_primary:
-                    reco_total_energy += particles.calo_ke
+                    reco_total_energy += particles.calo_ke/77.0777/0.81*81.3955
                 elif particles.pid ==2 and particles.is_primary:
                     reco_total_energy += particles.csda_ke
                 elif particles.pid ==3 and particles.is_primary:
@@ -190,7 +206,8 @@ class nuer2tAna(AnaBase):
             reco_nue_dict['true_topology'] = true_topology
             reco_nue_dict['true_category'] = true_category
             reco_nue_dict['true_flash_time'] = true_inter.particles[0].parent_t
-            reco_nue_dict['true_containment'] = true_inter.is_contained
+            reco_nue_dict['true_containment'] = true_containment
+            reco_nue_dict['true_fiducial'] = true_inter.is_fiducial
             reco_nue_dict['true_neutrino_id'] = true_inter.nu_id
             reco_nue_dict['true_nu_energy'] = true_inter.energy_init
 

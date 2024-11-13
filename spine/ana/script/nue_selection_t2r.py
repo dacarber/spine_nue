@@ -61,26 +61,43 @@ class nuet2rAna(AnaBase):
             event_status = None
             if reco_inter == None:
                 continue
-            
+            if true_inter.nu_id < 0:
+                continue
+            energy = 0
+            for par in true_inter.particles:
+                if par.is_primary:
+                    energy += par.energy_init
+            #df_int_e.append(energy)
             # Containment cut
-            if not true_inter.is_contained : continue
-            
+            #if not true_inter.is_contained : continue
+            true_containment = True
+            for par in true_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    #print(par)
+                    true_containment = False
+                    #continue
+            reco_containment = True
+            bad_interaction = False
+            for par in reco_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    reco_containment = False
+                    bad_interaction = True
+                    
             # Primary electron cut
             true_electron = [p for p in true_inter.particles if (p.pid == 1) and (p.is_primary) and (p.energy_init > 70)]
-            if len(true_electron) != 1 : continue
+            #if len(true_electron) != 1 : continue
 
             # Primary photons cut
             true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_init > 40)]
             
             #Sort protons by highest energy
-            
             true_protons = sorted([tp for tp in true_protons], key=lambda tp : tp.energy_deposit, reverse=True)
 
 
-            bad_interaction = False
+            
              # Containment cut
-            if not reco_inter.is_contained : 
-                bad_interaction = True
+            #if not reco_inter.is_contained : 
+            #    bad_interaction = True
             
             # Fiducial cut
             #if not reco_inter.is_fiducial : continue
@@ -93,7 +110,10 @@ class nuet2rAna(AnaBase):
                 bad_interaction = True
             reco_electrons = sorted([te for te in reco_electrons], key=lambda te : te.calo_ke, reverse=True)
             matched_electron = None
+            
             for reco_e in reco_inter.particles:
+                if len(true_electron) <= 0:
+                    break
                 if len(true_electron[0].match_ids) > 0:
                     if reco_e.id == true_electron[0].match_ids[0]:
                         matched_electron = reco_e
@@ -115,8 +135,8 @@ class nuet2rAna(AnaBase):
             true_topology =  f'{len(true_photons)}g{len(true_electron)}e{len(true_muon)}m{len(true_pion)}pi{len(true_protons)}p'
 
              #Finds the category of interactions i.e. 1e1p, backgrounds
-            reco_category = selection.reco_category(reco_inter,topology, bad_interaction)
-            true_category = selection.true_category(true_inter,true_topology)
+            reco_category = selection.reco_category(reco_inter,topology, bad_interaction,reco_containment)
+            true_category = selection.true_category(true_inter,true_topology,true_containment)
             
             # This is our pi0 event
             reco_total_energy = 0
@@ -142,7 +162,7 @@ class nuet2rAna(AnaBase):
             reco_nue_dict['reco_bad_event'] = bad_interaction
             reco_nue_dict['reco_interaction_id'] = match[0].id
             reco_nue_dict['reco_flash_time'] = reco_inter.flash_time
-            reco_nue_dict['reco_containment'] = reco_inter.is_contained
+            reco_nue_dict['reco_containment'] = reco_containment
             reco_nue_dict['reco_topology'] = topology
             reco_nue_dict['reco_number_protons'] = len(reco_protons)
             reco_nue_dict['reco_vertex_x'] = reco_inter.vertex[0]
@@ -191,6 +211,7 @@ class nuet2rAna(AnaBase):
             reco_nue_dict['true_nu_energy'] = true_inter.energy_init
             reco_nue_dict['true_category'] = true_category
             reco_nue_dict['true_flash_time'] = true_inter.particles[0].parent_t
+            reco_nue_dict['true_neutrino_energy'] = energy
 
 
             if len(true_protons)>0:

@@ -74,9 +74,16 @@ class local_nuer2tAna(AnaBase):
                 continue
             
             # Containment cut
-            if not reco_inter.is_contained : 
-                event_status+='c'
-                continue
+            reco_containment = True
+            for par in reco_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    event_status+='c'
+                    reco_containment = False
+                    continue
+            true_containment = True
+            for par in true_inter.particles:
+                if par.pid >1 and par.is_contained == False and par.is_primary:
+                    true_containment = False
             # Fiducial cut
             #if not reco_inter.is_fiducial : continue
             
@@ -85,7 +92,7 @@ class local_nuer2tAna(AnaBase):
                 event_status+='f'
                 continue
             # Primary muon cut
-            reco_electron = [p for p in reco_inter.particles if (p.pid == 1) and (p.is_primary) and (p.calo_ke > 80)]
+            reco_electron = [p for p in reco_inter.particles if (p.pid == 1) and (p.is_primary) and (p.calo_ke > 70)]
             if len(reco_electron) != 1 : 
                 reco_electron = sorted([te for te in reco_electron], key=lambda te : te.calo_ke, reverse=True)
                 event_status+='e'
@@ -94,12 +101,12 @@ class local_nuer2tAna(AnaBase):
 
             
             
-            true_electrons = [t for t in true_inter.particles if (t.pid == 1) and (t.is_primary) and (t.energy_deposit > 80)]
+            true_electrons = [t for t in true_inter.particles if (t.pid == 1) and (t.is_primary) and (t.energy_init > 70)]
             true_electrons = sorted([te for te in true_electrons], key=lambda te : te.energy_deposit, reverse=True)
 
             # Primary photons cut
-            reco_protons = [p for p in reco_inter.particles if (p.pid == 4) and (p.is_primary) and (p.csda_ke > 50)]
-            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_deposit > 50)]
+            reco_protons = [p for p in reco_inter.particles if (p.pid == 4) and (p.is_primary) and (p.csda_ke > 40)]
+            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_init > 40)]
             
             #Sort protons by highest energy
             reco_protons = sorted([rp for rp in reco_protons], key=lambda rp : rp.csda_ke, reverse=True) 
@@ -111,17 +118,17 @@ class local_nuer2tAna(AnaBase):
             topology = f'{len(reco_photons)}g{len(reco_electron)}e{len(reco_muon)}m{len(reco_pion)}pi{len(reco_protons)}p'
 
             pi0_tag = False
-            true_photons = [p for p in true_inter.particles if (p.pid == 0) and (p.is_primary) and (p.energy_deposit > 25)]
+            true_photons = [p for p in true_inter.particles if (p.pid == 0) and (p.is_primary) and (p.energy_init > 25)]
             if len(true_photons) >0:
                 for tph in true_photons:
                     if tph.pdg_code == 22 and tph.is_primary and tph.creation_process == 'Decay' and tph.ancestor_pdg_code == 111:
                         pi0_tag = True
-            true_muon = [p for p in true_inter.particles if (p.pid == 2) and (p.is_primary) and (p.energy_deposit > 25)]
-            true_pion = [p for p in true_inter.particles if (p.pid == 3) and (p.is_primary) and (p.energy_deposit > 25)]
+            true_muon = [p for p in true_inter.particles if (p.pid == 2) and (p.is_primary) and (p.energy_init > 25)]
+            true_pion = [p for p in true_inter.particles if (p.pid == 3) and (p.is_primary) and (p.energy_init > 25)]
             true_topology =  f'{len(true_photons)}g{len(true_electrons)}e{len(true_muon)}m{len(true_pion)}pi{len(true_protons)}p'
             
-            reco_category = selection.reco_category(reco_inter,topology, event_status)
-            true_category = selection.true_category(true_inter,true_topology)
+            reco_category = selection.reco_category(reco_inter,topology, event_status,reco_containment)
+            true_category = selection.true_category(true_inter,true_topology,true_containment)
 
             if (reco_category == 'Nue Other' or reco_category == '1e' or reco_category == '1e1pi1p' or reco_category == '1e1p' or reco_category == '1eNp') and event_status == '':
                 print("Nue Inclusive",true_category,":",data['file_index']," Topology: ", true_topology)

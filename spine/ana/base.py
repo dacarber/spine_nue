@@ -126,6 +126,7 @@ class AnaBase(ABC):
         # Define the name of the file to write to
         assert len(name) > 0, "Must provide a non-empty name."
         file_name = f'{self.name}_{name}.csv'
+        print("CSV file name: ",file_name)
         if self.output_prefix:
             file_name = f'{self.output_prefix}_{file_name}'
         if self.log_dir:
