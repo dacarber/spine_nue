@@ -1,6 +1,7 @@
 """Tracking reconstruction modules."""
 
 import numpy as np
+import math
 
 from scipy.spatial.distance import cdist
 
@@ -12,7 +13,7 @@ from spine.utils.tracking import get_track_length
 from spine.post.base import PostBase
 
 __all__ = ['CSDAEnergyProcessor', 'TrackValidityProcessor',
-           'TrackShowerMergerProcessor']
+           'TrackShowerMergerProcessor','PionShowerFixProcessor']
 
 
 class CSDAEnergyProcessor(PostBase):
@@ -303,5 +304,201 @@ def check_merge(p_track, p_shower, angle_threshold=0.95,
 
     result = (check_dedx and check_direction and
               check_adjacency and check_track_energy)
+
+    return result
+class PionShowerFixProcessor(PostBase):
+    """Merge tracks into showers based on a set of selection criteria.
+    """
+    name = 'pion_to_shower_fix'
+    aliases = ['pion_shower_fix']
+
+    def __init__(self, angle_threshold=10, adjacency_threshold=0.5,
+                  **kwargs):
+        """Post-processor to merge tracks into showers.
+
+        Parameters
+        ----------
+        angle_threshold : float, default 0.95
+            Check if track and shower cosine similarity is greater than this value.
+        adjacency_threshold : float, default 0.5
+            Check if track and shower is within this threshold distance.
+        dedx_limit : int, default -1
+            Check if the track dedx is below this value,
+            to avoid merging protons.
+        track_length_limit : int, default 40
+            Check if track length is below this value,
+            to avoid merging long tracks.
+        """
+        # Initialize the parent class
+        super().__init__('interaction', 'reco')
+
+        self.angle_threshold = abs(np.cos(np.radians(angle_threshold)))
+        self.adjacency_threshold = adjacency_threshold
+        #self.track_length_limit = track_length_limit
+
+    def process(self, data):
+        """Loop over the reco interactions and merge tracks into showers,
+        if they pass the selection criteria.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary of data products
+        """
+        # Loop over the reco interactions
+        interactions = []
+        for ia in data['reco_interactions']:
+            # Leading shower and its ke
+            shower_p = None
+            shower_p_max_ke = 0
+            skip_interaction=False
+            # Loop over particles, select the ones that pass a threshold
+
+            #Checks for protons that are correctly identified by ther vertex. If no primary proton exist then continue merging
+            for p in ia.particles:
+                if p.is_primary and p.shape == TRACK_SHP and p.pid == 4 and p.csda_ke > 40:
+                    min_point = cdist(np.array([ia.vertex]), np.array([p.start_point]))
+                    if min_point <= 5:
+                        continue
+                    skip_interaction=True
+            if skip_interaction:
+                continue
+                
+            #Checks for an electron
+            for p in ia.particles:
+                if p.is_primary and p.shape == SHOWR_SHP and p.pid == 1 and p.calo_ke > 70:
+                    if p.ke > shower_p_max_ke:
+                        shower_p = p
+                        shower_p_max_ke = p.ke
+            if shower_p is None:
+                interactions.append(ia)
+                continue
+            new_particles = []
+
+            #Checks for pion candidates that might need to be merged with electron and fixes the particles in the interaction
+            for p in ia.particles:
+                if p.shape == TRACK_SHP and p.is_primary and p.pid == 3 and p.csda_ke > 25:
+                    should_fix = check_pion_shower(p, shower_p,
+                        angle_threshold=self.angle_threshold,
+                        adjacency_threshold=self.adjacency_threshold,
+                        )
+                    if should_fix:
+                        merge_pion_to_shower(shower_p, p,ia)
+                        p.is_valid = False
+                    else:
+                        new_particles.append(p)
+                else:
+                    new_particles.append(p)
+            if len(ia.particles) != len(new_particles):
+                ia.particles = new_particles
+            interactions.append(ia)
+
+        data['reco_interactions'] = interactions
+
+
+def merge_pion_to_shower(p1, p2, inter):
+    """Merge a track p2 into shower p1.
+
+    Parameters
+    ----------
+    p1 : RecoParticle
+        Shower particle to merge p1 into.
+    p2 : RecoParticle
+        Track particle p2 that will be merged into p1.
+    """
+    # Sanity checks
+    assert p1.shape == SHOWR_SHP
+    assert p2.shape == TRACK_SHP
+
+    # Stack the two particle array attributes together
+    for attr in ['index', 'depositions']:
+        val = np.concatenate([getattr(p1, attr), getattr(p2, attr)])
+        setattr(p1, attr, val)
+    for attr in ['points', 'sources']:
+        val = np.vstack([getattr(p1, attr), getattr(p2, attr)])
+        setattr(p1, attr, val)
+    #Check for protons in interaction and uses the median startpoint to replace the vertex of the interaction. 
+    #Also recalculate the start point of the shower either by the closest point to the new vertex or to the farthest point of the merged pion.
+    has_proton = False
+    proton_x, proton_y, proton_z = [], [], []
+    for particle in inter.particles:
+        if particle.pid == 4:
+            has_proton = True
+            proton_x.append(particle.start_point[0])
+            proton_y.append(particle.start_point[1])
+            proton_z.append(particle.start_point[2])
+    if has_proton == True:
+        median_x = np.median(proton_x)
+        median_y = np.median(proton_y)
+        median_z = np.median(proton_z)
+        inter.vertex = [median_x,median_y,median_z]
+        min_shower_point = cdist(np.array([inter.vertex]), p1.points)
+        p1.start_point = p1.points[np.where(min_shower_point==min_shower_point.min())[0][0]]
+
+    #Checks for the protons and if their startpoint is within 5 voxels they are reclassified as primary
+        for par in inter.particles:
+            if par.pid == 4:
+                proton_dist = cdist(np.array([inter.vertex]), np.array([par.start_point]))
+                if proton_dist <= 5: #Change this number to change the distance (Might want to make this a variable)
+                    par.is_primary = True
+                    par.primary_scores = [0,1]
+    else:
+        min_shower_point = cdist(np.array([p2.start_point]), p1.points)
+        p1.start_point = p1.points[np.where(min_shower_point==min_shower_point.min())[0][0]]
+        #p1.start_point = np.copy(p2.start_point)
+    
+    # Recalculate the calo_ke of the merged electron
+    p1.calo_ke = p1.calo_ke + p2.ke
+
+    # If one of the two particles is a primary, the new one is
+    p1.is_primary = max(p1.is_primary, p2.is_primary)
+    if p2.primary_scores[-1] > p1.primary_scores[-1]:
+        p1.primary_scores = p2.primary_scores
+        p1.is_primary = True
+
+
+def check_pion_shower(p_track, p_shower, angle_threshold=0.95,
+                adjacency_threshold=0.5, dedx_limit=-1, track_length_limit=40):
+    """Check if a track and a shower can be merged.
+
+    Parameters
+    ----------
+    p_track : RecoParticle
+        Track particle that will be merged into the shower.
+    p_shower : RecoParticle
+        Shower particle to merge the track into.
+    angle_threshold : float, default 0.95
+        Check if track and shower cosine distance is greater than this value.
+    adjacency_threshold : float, default 0.5
+        Check if track and shower is within threshold distance.
+    dedx_limit : int, default -1
+        Check if the track dedx is below this value,
+        to avoid merging protons.
+    track_length_limit : int, default 40
+        Check if track length is below this value,
+        to avoid merging long tracks.
+
+    Returns
+    -------
+    result : bool
+        True if the track and shower can be merged, False otherwise.
+    """
+
+    check_direction = False
+    check_adjacency = False
+    check_dedx = True
+    check_track_energy = False
+
+    angular_sep = math.acos(np.dot(p_track.start_dir,p_shower.start_dir))
+
+    if angular_sep < angle_threshold or abs(angular_sep - np.pi) < angle_threshold:
+        check_direction = True
+
+    if cdist(p_shower.points.reshape(-1, 3),
+             p_track.points.reshape(-1, 3)).min() < adjacency_threshold:
+        check_adjacency = True
+
+
+    result = (check_direction and check_adjacency)
 
     return result

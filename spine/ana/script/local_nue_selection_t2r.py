@@ -88,12 +88,12 @@ class local_nuet2rAna(AnaBase):
                     reco_containment = False
                     bad_interaction = True
             # Primary electron cut
-            true_electron = [p for p in true_inter.particles if (p.pid == 1) and (p.is_primary) and (p.energy_deposit > 70)]
+            true_electron = [p for p in true_inter.particles if (p.pid == 1) and (p.is_primary) and (p.energy_init > 70)]
             if len(true_electron) != 1 : continue
 
             # Primary photons cut
             print('1')
-            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_deposit > 40)]
+            true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_init > 40)]
             
             #Sort protons by highest energy
             

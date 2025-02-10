@@ -89,7 +89,7 @@ class nuer2tAna(AnaBase):
                 event_status+='f'
                 continue
             # Grabs electrons and requires that there is only 1 primary electron shower
-            reco_electron = [p for p in reco_inter.particles if (p.pid == 1) and (p.is_primary) and (p.calo_ke/77.0777/0.81*81.3955 > 70)]
+            reco_electron = [p for p in reco_inter.particles if (p.pid == 1) and (p.is_primary) and (p.calo_ke > 70)]
             print(reco_inter.particles[0].__dir__())
             if len(reco_electron) != 1 : 
                 reco_electron = sorted([te for te in reco_electron], key=lambda te : te.calo_ke, reverse=True)
@@ -152,8 +152,20 @@ class nuer2tAna(AnaBase):
             # Calculation of conversion dist
             if len(reco_electron) > 0:
                 reco_conversion_dist = selection.conversion_dist(reco_electron[0], reco_inter.vertex)
-            
-            
+
+            #Finds angles of particles
+            reco_open_angle = -1
+            if len(reco_electron) > 0:
+                if len(reco_protons) > 0:
+                    reco_open_angle = selection.opening_angle(reco_electron[0],reco_protons[0])
+                reco_e_polar = selection.polar_angle(reco_electron[0])
+                reco_e_azim = selection.azimuthal_angle(reco_electron[0])
+            true_open_angle = -1
+            if len(true_electrons) > 0:
+                if len(true_protons) > 0:
+                    true_open_angle = selection.opening_angle(true_electrons[0],true_protons[0])
+                true_e_polar = selection.polar_angle(true_electrons[0])
+                true_e_azim = selection.azimuthal_angle(true_electrons[0])
             # reco dict corresponding to a CSV row
             reco_nue_dict = {}
             reco_nue_dict['reco_event_status'] = event_status
@@ -167,8 +179,15 @@ class nuer2tAna(AnaBase):
             reco_nue_dict['reco_vertex_y'] = reco_inter.vertex[1]
             reco_nue_dict['reco_vertex_z'] = reco_inter.vertex[2]
             reco_nue_dict['reco_nu_energy'] = reco_total_energy
-
+            reco_nue_dict['reco_dpT'] = selection.delta_pT(reco_inter,true_int=False)
+            reco_nue_dict['reco_dalphaT'] = selection.delta_alphaT(reco_inter,true_int=False)
+            reco_nue_dict['reco_dphiT'] = selection.delta_phiT(reco_inter,true_int=False)
+            reco_nue_dict['reco_e_pT'] = np.linalg.norm(np.array(selection.electron_transverse_momentum(reco_inter,true_int=False)))
+            reco_nue_dict['reco_p_pT'] = np.linalg.norm(np.array(selection.proton_transverse_momentum(reco_inter)))
+            reco_nue_dict['reco_opening_anglee'] = reco_open_angle
             
+
+
             if len(reco_protons)>0:
                 reco_nue_dict['reco_leading_proton_start_point_x'] = reco_protons[0].start_point[0]
                 reco_nue_dict['reco_leading_proton_start_point_y'] = reco_protons[0].start_point[1]
@@ -176,6 +195,7 @@ class nuer2tAna(AnaBase):
                 reco_nue_dict['reco_leading_proton_energy'] = reco_protons[0].csda_ke
                 reco_nue_dict['reco_leading_proton_pid_score'] = reco_protons[0].pid_scores[4]
                 reco_nue_dict['reco_leading_proton_length'] = reco_protons[0].length
+                
             else: 
                 reco_nue_dict['reco_leading_proton_start_point_x'] = None
                 reco_nue_dict['reco_leading_proton_start_point_y'] = None
@@ -184,14 +204,16 @@ class nuer2tAna(AnaBase):
                 reco_nue_dict['reco_leading_proton_pid_score'] = None
                 reco_nue_dict['reco_leading_proton_length'] = None
             if len(reco_electron)>0:
-                reco_nue_dict['reco_electron_start_point_x'] = reco_electron[0].start_point[0]
-                reco_nue_dict['reco_electron_start_point_y'] = reco_electron[0].start_point[1]
-                reco_nue_dict['reco_electron_start_point_z'] = reco_electron[0].start_point[2]
+                reco_nue_dict['reco_electron_start_point_x'] = reco_electron[0].start_dir[0]
+                reco_nue_dict['reco_electron_start_point_y'] = reco_electron[0].start_dir[1]
+                reco_nue_dict['reco_electron_start_point_z'] = reco_electron[0].start_dir[2]
                 reco_nue_dict['reco_electron_energy'] = reco_electron[0].calo_ke
                 reco_nue_dict['reco_electron_size'] = reco_electron[0].size
                 reco_nue_dict['reco_electron_pid_score'] = reco_electron[0].pid_scores[0]
                 reco_nue_dict['reco_electron_shape'] = reco_electron[0].shape
                 reco_nue_dict['reco_electron_conversion_dist'] = reco_conversion_dist
+                reco_nue_dict['reco_electron_polar'] = reco_e_polar
+                reco_nue_dict['reco_electron_azimuthal'] = reco_e_azim
             else:
                 reco_nue_dict['reco_electron_start_point_x'] = None
                 reco_nue_dict['reco_electron_start_point_y'] = None
@@ -201,7 +223,8 @@ class nuer2tAna(AnaBase):
                 reco_nue_dict['reco_electron_pid_score'] = None
                 reco_nue_dict['reco_electron_shape'] = None
                 reco_nue_dict['reco_electron_conversion_dist'] = None
-                
+                reco_nue_dict['reco_electron_polar'] = None
+                reco_nue_dict['reco_electron_azimuthal'] = None
             
             reco_nue_dict['true_topology'] = true_topology
             reco_nue_dict['true_category'] = true_category
@@ -210,6 +233,12 @@ class nuer2tAna(AnaBase):
             reco_nue_dict['true_fiducial'] = true_inter.is_fiducial
             reco_nue_dict['true_neutrino_id'] = true_inter.nu_id
             reco_nue_dict['true_nu_energy'] = true_inter.energy_init
+            reco_nue_dict['true_dpT'] = selection.delta_pT(true_inter,true_int=True)
+            reco_nue_dict['true_dalphaT'] = selection.delta_alphaT(true_inter,true_int=True)
+            reco_nue_dict['true_dphiT'] = selection.delta_phiT(true_inter,true_int=True)
+            reco_nue_dict['true_e_pT'] = np.linalg.norm(np.array(selection.electron_transverse_momentum(true_inter,true_int=True)))
+            reco_nue_dict['true_p_pT'] = np.linalg.norm(np.array(selection.proton_transverse_momentum(true_inter)))
+            reco_nue_dict['true_opening_angle'] = true_open_angle
 
             if len(true_protons)>0:
                 reco_nue_dict['true_leading_proton_energy_deposit'] = true_protons[0].energy_deposit
@@ -233,6 +262,8 @@ class nuer2tAna(AnaBase):
                 reco_nue_dict['true_electron_size'] = true_electrons[0].size
                 reco_nue_dict['true_electron_shape'] = true_electrons[0].shape
                 reco_nue_dict['true_electron_pid'] = true_electrons[0].pid
+                reco_nue_dict['true_electron_polar'] = true_e_polar
+                reco_nue_dict['true_electron_azimuthal'] = true_e_azim
 
                 
             else:
@@ -244,6 +275,8 @@ class nuer2tAna(AnaBase):
                 reco_nue_dict['true_electron_size'] = None
                 reco_nue_dict['true_electron_shape'] = None
                 reco_nue_dict['true_electron_pid'] = None
+                reco_nue_dict['true_electron_polar'] = None
+                reco_nue_dict['true_electron_azimuthal'] = None
             if matched_electron is not None:
                 reco_nue_dict['true_match_electron_energy_deposit'] = matched_electron.energy_deposit
                 reco_nue_dict['true_match_leading_electron_energy_init'] = matched_electron.energy_init

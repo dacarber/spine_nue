@@ -91,7 +91,7 @@ class nuet2rAna(AnaBase):
             true_protons = [t for t in true_inter.particles if (t.pid == 4) and (t.is_primary) and (t.energy_init > 40)]
             
             #Sort protons by highest energy
-            true_protons = sorted([tp for tp in true_protons], key=lambda tp : tp.energy_deposit, reverse=True)
+            true_protons = sorted([tp for tp in true_protons], key=lambda tp : tp.energy_init, reverse=True)
 
 
             
@@ -155,7 +155,7 @@ class nuet2rAna(AnaBase):
             if len(reco_electrons) > 0 :
                 reco_conversion_dist = selection.conversion_dist(reco_electrons[0], reco_inter.vertex)
 
-
+            
             
             # reco dict corresponding to a CSV row
             reco_nue_dict = {}
@@ -171,6 +171,10 @@ class nuet2rAna(AnaBase):
             reco_nue_dict['reco_nu_energy'] = reco_total_energy
             reco_nue_dict['reco_event_status'] = event_status
             reco_nue_dict['reco_category'] = reco_category
+            reco_nue_dict['reco_pT'] = selection.delta_pT(reco_inter,False)
+            reco_nue_dict['reco_alphaT'] = selection.delta_alphaT(reco_inter,False)
+            reco_nue_dict['reco_phiT'] = selection.delta_phiT(reco_inter,False)
+
 
             if len(reco_protons)>0:
                 reco_nue_dict['reco_leading_proton_start_point_x'] = reco_protons[0].start_point[0]
@@ -212,6 +216,9 @@ class nuet2rAna(AnaBase):
             reco_nue_dict['true_category'] = true_category
             reco_nue_dict['true_flash_time'] = true_inter.particles[0].parent_t
             reco_nue_dict['true_neutrino_energy'] = energy
+            reco_nue_dict['true_pT'] = selection.delta_pT(true_inter,True)
+            reco_nue_dict['true_alphaT'] = selection.delta_alphaT(true_inter,True)
+            reco_nue_dict['true_phiT'] = selection.delta_phiT(true_inter,True)
 
 
             if len(true_protons)>0:
