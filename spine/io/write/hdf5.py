@@ -37,14 +37,14 @@ class HDF5Writer:
     """
     name = 'hdf5'
 
-    def __init__(self, file_name=None, keys=None, skip_keys=None,
-                 dummy_ds=None, overwrite=False, append=False,
-                 prefix=None, split=False):
+    def __init__(self, file_name=None, keys=None, skip_keys=None, dummy_ds=None,
+                 overwrite=False, append=False, prefix=None, split=False,
+                 lite=False):
         """Initializes the basics of the output file.
 
         Parameters
         ----------
-        file_name : str, default 'spine.h5'
+        file_name : str, optional
             Name of the output HDF5 file
         keys : List[str], optional
             List of data product keys to store. If not specified, store everything
@@ -62,6 +62,8 @@ class HDF5Writer:
             provided that no file_name is explicitely provided
         split : bool, default False
             If `True`, split the output to produce one file per input file
+        lite : bool, default False
+            If `True`, the lite version of objects is stored (drop point indexes)
         """
         # If the output file name is not provided, use the input file prefix(es)
         if not file_name:
@@ -74,7 +76,14 @@ class HDF5Writer:
                 file_name = [f'{pre}_spine.h5' for pre in prefix]
 
         elif split:
-            file_name = [f'{file_name}_{i}' for i in range(len(prefix))]
+            dir_name = os.path.dirname(file_name)
+            if dir_name:
+                dir_name += '/'
+            base_name = os.path.splitext(os.path.basename(file_name))[0]
+            if not prefix:
+                file_name = [f'{dir_name}{base_name}_{i}.h5' for i in range(len(prefix))]
+            else:
+                file_name = [f'{dir_name}{pre}_{base_name}.h5' for pre in prefix]
 
         # Check that the output file(s) do(es) not already exist, if requested
         if not overwrite:
@@ -92,6 +101,7 @@ class HDF5Writer:
         self.file_name = file_name
         self.append = append
         self.split = split
+        self.lite = lite
         self.ready = False
         self.object_dtypes = [] # TODO: make this a set
 
@@ -154,11 +164,11 @@ class HDF5Writer:
         for file_name in file_names:
             with h5py.File(file_name, 'w') as out_file:
                 # Initialize the info dataset that stores environment parameters
+                out_file.create_dataset(
+                        'info', (0,), maxshape=(None,), dtype=None)
+                out_file['info'].attrs['version'] = __version__
                 if cfg is not None:
-                    out_file.create_dataset(
-                            'info', (0,), maxshape=(None,), dtype=None)
                     out_file['info'].attrs['cfg'] = yaml.dump(cfg)
-                    out_file['info'].attrs['version'] = __version__
 
                 # Initialize the event dataset and their reference array datasets
                 self.initialize_datasets(out_file)
@@ -329,7 +339,7 @@ class HDF5Writer:
             List of (key, dtype) pairs
         """
         object_dtype = []
-        for key, val in obj.as_dict().items():
+        for key, val in obj.as_dict(self.lite).items():
             # Append the relevant data type
             if isinstance(val, str):
                 # String
@@ -338,7 +348,7 @@ class HDF5Writer:
             elif hasattr(obj, 'enum_attrs') and key in obj.enum_attrs:
                 # Recognized enumerated list
                 enum_dtype = h5py.enum_dtype(
-                        obj.enum_attrs[key], basetype=type(val))
+                        dict(obj.enum_attrs[key]), basetype=type(val))
                 object_dtype.append((key, enum_dtype))
 
             elif np.isscalar(val):
@@ -523,7 +533,7 @@ class HDF5Writer:
                     array = [array]
 
             if val.dtype in self.object_dtypes:
-                self.store_objects(out_file, event, key, array, val.dtype)
+                self.store_objects(out_file, event, key, array, val.dtype, self.lite)
             else:
                 self.store(out_file, event, key, array)
 
@@ -641,7 +651,7 @@ class HDF5Writer:
         event[key] = region_ref
 
     @staticmethod
-    def store_objects(out_file, event, key, array, obj_dtype):
+    def store_objects(out_file, event, key, array, obj_dtype, lite):
         """Stores a list of objects with understandable attributes in the file
         and stores its mapping in the event dataset.
 
@@ -657,11 +667,13 @@ class HDF5Writer:
             Array of objects or dictionaries to be stored
         obj_dtype : list
             List of (key, dtype) pairs which specify what's to store
+        lite : bool
+            If `True`, store the lite version of objects
         """
         # Convert list of objects to list of storable objects
         objects = np.empty(len(array), obj_dtype)
         for i, obj in enumerate(array):
-            objects[i] = tuple(obj.as_dict().values())
+            objects[i] = tuple(obj.as_dict(lite).values())
 
         # Extend the dataset, store array
         dataset = out_file[key]

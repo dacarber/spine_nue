@@ -134,10 +134,6 @@ class Driver:
             self.ana = AnaManager(
                     ana, log_dir=self.log_dir, prefix=self.log_prefix)
 
-    def __len__(self):
-        """Returns the number of events in the underlying reader object."""
-        return len(self.reader)
-
     def process_config(self, io, base=None, model=None, build=None,
                        post=None, ana=None, rank=None):
         """Reads the configuration and dumps it to the logger.
@@ -335,6 +331,7 @@ class Driver:
 
         # Initialize the data loader/reader
         self.loader = None
+        self.unwrapper = None
         if loader is not None:
             # Initialize the torch data loader
             self.watch.initialize('load')
@@ -402,30 +399,63 @@ class Driver:
             Shared input summary string to be used to prefix outputs
         """
         # Fetch file base names (ignore where they live)
-        file_names = [os.path.basename(f) for f in file_paths]
+        file_names = [os.path.splitext(os.path.basename(f))[0] for f in file_paths]
 
         # Get the shared prefix of all files in the list
-        prefix = os.path.splitext(os.path.commonprefix(file_names))[0]
+        prefix = os.path.commonprefix(file_names)
 
         # If there is only one file, done
         if len(file_names) == 1:
-            return prefix
+            if not split_output:
+                return prefix, prefix
+            else:
+                return prefix, [prefix]
 
-        # Otherwise, form the suffix from the first and last file names
-        first = os.path.splitext(file_names[0][len(prefix):])
-        last = os.path.splitext(file_names[-1][len(prefix):])
-        first = first[0] if first[0] and first[0][0] != '.' else ''
-        last = last[0] if last[0] and last[0][0] != '.' else ''
+        # Otherwise, assemble log name from input file names
+        sep = '--'
+        log_prefix = ''
+        if len(prefix):
+            log_prefix += prefix
 
-        suffix = f'{first}--{len(file_names)-2}--{last}'
-        log_prefix = prefix + suffix
+        # Get the shared suffix of all files in the list
+        file_names_f = [f[::-1] for f in file_names]
+        suffix = os.path.commonprefix(file_names_f)[::-1]
+        if prefix == suffix:
+            suffix = ''
+
+        # Pad the center of the log name with compnents which are not shared
+        first = file_names[0][len(prefix):len(file_names[0])-len(suffix)]
+        if len(first):
+            if len(log_prefix):
+                log_prefix += sep
+            log_prefix += first
+
+        skip_count = len(file_names) - 2
+        if len(file_names) > 2:
+            if len(log_prefix):
+                log_prefix += sep
+            log_prefix += f'{skip_count}'
+
+        last = file_names[-1][len(prefix):len(file_names[-1])-len(suffix)]
+        if len(last):
+            if len(log_prefix):
+                log_prefix += sep
+            log_prefix += last
+
+        # Add the shared suffix
+        if len(suffix):
+            log_prefix += f'--{suffix}'
+
+        # Truncate file names that are too long
+        max_length = 230
+        if len(log_prefix) > max_length:
+            log_prefix = log_prefix[:max_length-3] + '---'
 
         # Always provide a single prefix for the log, adapt output prefix
         if not split_output:
             return log_prefix, log_prefix
         else:
-            return (log_prefix,
-                    [os.path.splitext(name)[0] for name in file_names])
+            return log_prefix, file_names
 
     def initialize_log(self):
         """Initialize the output log for this driver process."""
@@ -452,6 +482,51 @@ class Driver:
         # Initialize the log
         log_path = os.path.join(self.log_dir, log_name)
         self.logger = CSVWriter(log_path, overwrite=self.overwrite_log)
+
+    def __len__(self):
+        """Returns the number of events in the underlying reader object.
+
+        Returns
+        -------
+        int
+            Number of elements in the underlying loader/reader.
+        """
+        return len(self.reader)
+
+    def __iter__(self):
+        """Resets the counter and returns itself.
+
+        Returns
+        -------
+        object
+            The Driver itself
+        """
+        # If a loader is used, reinitialize it. Otherwise set an entry counter
+        if self.loader is not None:
+            self.loader_iter = iter(self.loader)
+            self.counter = None
+        else:
+            self.counter = 0
+
+        return self
+
+    def __next__(self):
+        """Defines how to process the next entry in the iterator.
+
+        Returns
+        -------
+        Union[dict, List[dict]]
+            Either one combined data dictionary, or one per entry in the batch
+        """
+        # If there are more iterations to go through, return data
+        if self.counter < len(self):
+            data = self.process(self.counter)
+            if self.counter is not None:
+                self.counter += 1
+
+            return data
+
+        raise StopIteration
 
     def run(self):
         """Loop over the requested number of iterations, process them."""
@@ -492,7 +567,8 @@ class Driver:
             # Release the memory for the next iteration
             data = None
 
-    def process(self, entry=None, run=None, event=None, iteration=None):
+    def process(self, entry=None, run=None, subrun=None, event=None,
+                iteration=None):
         """Process one entry or a batch of entries.
 
         Run single step of main SPINE driver. This includes data loading,
@@ -505,6 +581,8 @@ class Driver:
             Entry number to load
         run : int, optional
             Run number to load
+        subrun : int, optional
+            Subrun number to load
         event : int, optional
             Event number to load
         iteration : int, optional
@@ -520,7 +598,7 @@ class Driver:
         self.watch.start('iteration')
 
         # 1. Load data
-        data = self.load(entry, run, event)
+        data = self.load(entry, run, subrun, event)
 
         # 2. Pass data through the model
         if self.model is not None:
@@ -531,7 +609,7 @@ class Driver:
             self.watch.update(self.model.watch, 'model')
 
         # 3. Unwrap
-        if self.unwrap:
+        if self.unwrapper is not None:
             self.watch.start('unwrap')
             data = self.unwrapper(data)
             self.watch.stop('unwrap')
@@ -568,7 +646,7 @@ class Driver:
         # Return
         return data
 
-    def load(self, entry=None, run=None, event=None):
+    def load(self, entry=None, run=None, subrun=None, event=None):
         """Loads one batch/entry to process.
 
         If the model is run on the fly, the data is batched. Otherwise,
@@ -580,6 +658,8 @@ class Driver:
             Entry number, only valid with reader
         run : int, optional
             Run number, only valid with reader
+        subrun : int, optional
+            Subrun number to load
         event : int, optional
             Event number, only valid with reader
 
@@ -591,9 +671,10 @@ class Driver:
         # Dispatch to the appropriate loader
         if self.loader is not None:
             # Can only load batches sequentially, not by index
-            assert (entry is None and run is None and event is None), (
-                    "When calling the loader, no way to specify a specific "
-                    "entry or run/event pair.")
+            assert (entry is None and run is None and subrun is None and
+                    event is None), (
+                    "When calling the loader, there is no way to request a "
+                    "specific entry or run/subrun/event triplet.")
 
             # Initialize the loader, if necessary
             if self.loader_iter is None:
@@ -607,16 +688,16 @@ class Driver:
         else:
             # Must provide either entry number or both run and event numbers
             assert ((entry is not None) or
-                    (run is not None and event is not None)), (
-                           "Provide either the entry number or both the "
-                           "run number and the event number to read.")
+                    (run is not None and subrun is not None and event is not None)), (
+                           "Provide either the entry number or the run, subrun "
+                           "and event number to read.")
 
             # Read an entry
             self.watch.start('read')
             if entry is not None:
                 data = self.reader.get(entry)
             else:
-                data = self.reader.get_run_event(run, event)
+                data = self.reader.get_run_event(run, subrun, event)
             self.watch.stop('read')
 
         return data
@@ -636,10 +717,10 @@ class Driver:
             List of integer entry IDs to add to the index
         skip_entry_list : list, optional
             List of integer entry IDs to skip from the index
-        run_event_list: list((int, int)), optional
-            List of [run, event] pairs to add to the index
-        skip_run_event_list: list((int, int)), optional
-            List of [run, event] pairs to skip from the index
+        run_event_list: list((int, int, int)), optional
+            List of (run, subrun, event) triplets to add to the index
+        skip_run_event_list: list((int, int, int)), optional
+            List of (run, subrun, event) triplets to skip from the index
         """
         # Simply change the underlying entry list
         self.reader.process_entry_list(
